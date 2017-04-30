@@ -58,10 +58,7 @@ CREATE Table SpotData (
 
 CREATE View vwSpotData AS
 SELECT datetime(Dat.TimeStamp, 'unixepoch', 'localtime') TimeStamp, 
-	datetime(CASE WHEN (Dat.TimeStamp % 300) < 150
-	THEN Dat.TimeStamp - (Dat.TimeStamp % 300)
-	ELSE Dat.TimeStamp - (Dat.TimeStamp % 300) + 300
-	END, 'unixepoch', 'localtime') AS Nearest5min,
+	datetime(((Dat.TimeStamp+149)/300)*300, 'unixepoch', 'localtime') AS Nearest5min,
 	Inv.Name,
 	Inv.Type,
 	Dat.Serial,
@@ -165,10 +162,7 @@ CREATE Table Consumption (
 
 CREATE VIEW vwConsumption AS
 SELECT datetime(TimeStamp, 'unixepoch', 'localtime') TimeStamp, 
-	datetime(CASE WHEN (TimeStamp % 300) < 150
-	THEN TimeStamp - (TimeStamp % 300)
-	ELSE TimeStamp - (TimeStamp % 300) + 300
-	END, 'unixepoch', 'localtime') AS Nearest5min,
+	datetime(((TimeStamp+149)/300)*300, 'unixepoch', 'localtime') AS Nearest5min,
 	EnergyUsed,
 	PowerUsed
 	FROM Consumption;
