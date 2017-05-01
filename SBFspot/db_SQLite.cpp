@@ -226,81 +226,114 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
 	int rc = SQLITE_OK;
 	recordcount = 0;
 
-	sqlite3_stmt *pStmt = NULL;
+	sqlite3_stmt *dStmt = NULL;
 
-	sql << "SELECT strftime('%Y%m%d,%H:%M',TimeStamp),V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12 FROM [vwPvoData] WHERE "
-        "TimeStamp>DATE(DATE(),'" << -(datelimit-2) << " day') "
-        "AND PVoutput IS NULL "
-        "AND Serial=" << Serial << " "
-        "ORDER BY TimeStamp "
-        "LIMIT " << statuslimit;
+        // Find time slots requiring upload
+	sql << "SELECT datetime(TimeStamp, 'unixepoch', 'localtime') AS TimeSlot, "
+            "strftime('%Y%m%d,%H:%M',datetime(TimeStamp,'unixepoch','localtime')) AS TimeString,"
+            "TotalYield,Power FROM DayData WHERE "
+            "PVoutput IS NULL "
+            "AND Serial = " << Serial <<
+            " AND TimeSlot > DATE(DATE(),'" << -(datelimit-2) << " day') "
+            "ORDER BY TimeSlot "
+            "LIMIT " << statuslimit;
 
-	rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &pStmt, NULL);
+        rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &dStmt, NULL);
 
-	if (pStmt != NULL)
-	{
-		std::stringstream result;
-		while (sqlite3_step(pStmt) == SQLITE_ROW)
-		{
-			result.str("");
+        if (dStmt == NULL)
+        {
+            return rc;
+        }
+        std::stringstream result;
+        while (sqlite3_step(dStmt) == SQLITE_ROW)
+        {
+	    string timeslot = (char *)sqlite3_column_text(dStmt, 0);
+	    string dt = (char *)sqlite3_column_text(dStmt, 1);
+            // Energy Generation
+            int64_t V1 = sqlite3_column_int64(dStmt, 2);
+            // Power Generation
+            int64_t V2 = sqlite3_column_int64(dStmt, 3);
 
-			string dt = (char *)sqlite3_column_text(pStmt, 0);
-			// Energy Generation
-			int64_t V1 = sqlite3_column_int64(pStmt, 1);
-			// Power Generation
-			int64_t V2 = sqlite3_column_int64(pStmt, 2);
+            // from 2nd record, add a record separator
+            if (!data.empty()) result << ";";
 
-			// from 2nd record, add a record separator
-			if (!data.empty()) result << ";";
+            // Mandatory values
+            result << dt << "," << V1 << "," << V2;
 
-			// Mandatory values
-			result << dt << "," << V1 << "," << V2;
+	    sqlite3_stmt *cStmt = NULL;
+            sql.str("");
+            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot,"
+                "avg(EnergyUsed),avg(PowerUsed) FROM Consumption WHERE "
+                "TimeSlot IS '" << timeslot << "' GROUP BY TimeSlot";
 
-			result << ",";
-			// Energy Consumption
-			if (sqlite3_column_type(pStmt, 3) != SQLITE_NULL)
-				result << sqlite3_column_int64(pStmt, 3);
-
-			result << ",";
-			// Power Consumption
-			if (sqlite3_column_type(pStmt, 4) != SQLITE_NULL)
-				result << sqlite3_column_int64(pStmt, 4);
-
-			result << ",";
-			// Temperature
-			if (sqlite3_column_type(pStmt, 5) != SQLITE_NULL)
-				result << sqlite3_column_double(pStmt, 5);
-
-			result << ",";
-			// Voltage
-			if (sqlite3_column_type(pStmt, 6) != SQLITE_NULL)
-				result << sqlite3_column_double(pStmt, 6);
-
-			// Extended values
-			for (int extval = 7; extval <= 12; extval++)
-			{
-				result << ",";
-				if (sqlite3_column_type(pStmt, extval) != SQLITE_NULL)
-					result << sqlite3_column_double(pStmt, extval);
-			}
-
-			const std::string& str = result.str();
-			int end = str.length();
-
-			for (std::string::const_reverse_iterator it=str.rbegin(); it!=str.rend(); ++it, end--)
-			{
-				if ((*it) != ',')
-					break;
-			}
-
-			data.append(result.str().substr(0, end));
-			recordcount++;
-		}
-
-		sqlite3_finalize(pStmt);
-	}
-
-	return rc;
+            rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &cStmt, NULL);
+            if (cStmt != NULL)
+            {
+                if (sqlite3_step(cStmt) == SQLITE_ROW)
+                {
+                    result << ",";
+                    // Energy Consumption
+                    if (sqlite3_column_type(cStmt, 1) != SQLITE_NULL)
+                    {
+                        result << sqlite3_column_int64(cStmt, 1);
+                    }
+                    result << ",";
+                    // Power Consumption
+                    if (sqlite3_column_type(cStmt, 2) != SQLITE_NULL)
+                    {
+                        result << sqlite3_column_int64(cStmt, 2);
+                    }
+                }
+                else
+                {
+                    result << ",,";
+                }
+                sqlite3_finalize(cStmt);
+            }
+            else
+            {
+                result << ",,";
+            }
+	    sqlite3_stmt *sStmt = NULL;
+            sql.str("");
+            // !!! Make temperature and extended fields configurable through SQL or config, not hardcoded.
+            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot,"
+                "NULL,avg(Uac1),avg(Pdc1),avg(Pdc2),avg(Udc1),avg(Udc2),avg(Temperature),avg(Temperature) FROM SpotData WHERE "
+                "Serial = " << Serial <<
+                " AND TimeSlot IS '" << timeslot << "' GROUP BY TimeSlot";
+            
+            rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &sStmt, NULL);
+            if (sStmt != NULL)
+            {
+                if (sqlite3_step(sStmt) == SQLITE_ROW)
+                {
+                    // V5 to V12 - Temperature, Voltage and Extended values
+                    for (int idx = 1; idx <= 8; idx++)
+                    {
+                        result << ",";
+                        if (sqlite3_column_type(sStmt, idx) != SQLITE_NULL)
+                        {
+                            result << sqlite3_column_double(sStmt, idx);
+                        }
+                    }
+                }
+                sqlite3_finalize(sStmt);
+            }
+            const std::string& str = result.str();
+            int end = str.length();
+            // Ignore trailing commas...
+            for (std::string::const_reverse_iterator it=str.rbegin(); it!=str.rend(); ++it, end--)
+            {
+                if ((*it) != ',')
+                {
+                    break;
+                }
+            }
+            data.append(result.str().substr(0, end));
+            recordcount++;
+	    result.str("");
+        }
+        return rc;
 }
 
 int db_SQL_Base::batch_set_pvoflag(const std::string &data, unsigned int Serial)
