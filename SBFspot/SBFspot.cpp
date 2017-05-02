@@ -1,20 +1,14 @@
-#define VERSION "3.3.1"
+#define VERSION "3.3.2"
 
-// Config option 'SynchTime' can now be a value of 0-30 to control plant time adjustment
-// SynchTime=0  -> Time adjustment disabled
-// SynchTime=1  -> Time is adjusted once a day if needed
-// SynchTime=7  -> Time is adjusted once a week if needed
-// SynchTime=30 -> Time is adjusted once a month if needed
-
-// Fixed Issue 150 SBFspotUploadDeamon not uploading (Ubuntu 16.04)
+// Fixed Issue 160 Doesn't compile with gcc 6.1.1 (Fedora 24)
 
 /************************************************************************************************
-                               ____  ____  _____                _   
-                              / ___|| __ )|  ___|__ _ __   ___ | |_ 
+                               ____  ____  _____                _
+                              / ___|| __ )|  ___|__ _ __   ___ | |_
                               \___ \|  _ \| |_ / __| '_ \ / _ \| __|
-                               ___) | |_) |  _|\__ \ |_) | (_) | |_ 
+                               ___) | |_) |  _|\__ \ |_) | (_) | |_
                               |____/|____/|_|  |___/ .__/ \___/ \__|
-                                                   |_|              
+                                                   |_|
 
 	SBFspot - Yet another tool to read power production of SMA® solar/battery inverters
 	(c)2012-2016, SBF
@@ -514,7 +508,7 @@ int main(int argc, char **argv)
 	{
 		if ((cfg.CSV_Export == 1) && (cfg.nospot == 0))
 			ExportBatteryDataToCSV(&cfg, Inverters);
-		
+
 		//BatteryInverter -> Stop here
 		if (Inverters[0]->DevClass == BatteryInverter)
 		{
@@ -574,7 +568,7 @@ int main(int argc, char **argv)
 
             if (cfg.CSV_Export == 1)
                 ExportDayDataToCSV(&cfg, Inverters);
-			
+
 			#if defined(USE_SQLITE) || defined(USE_MYSQL)
 			if ((!cfg.nosql) && db.isopen())
 				db.day_data(Inverters);
@@ -1406,9 +1400,11 @@ E_SBFSPOT initialiseSMAConnection(InverterData *invData)
         LocalBTAddress[i] = pcktBuf[26+i];
 
     if (DEBUG_NORMAL)
+    {
         printf("Local BT address: %02X:%02X:%02X:%02X:%02X:%02X\n",
                LocalBTAddress[5], LocalBTAddress[4], LocalBTAddress[3],
                LocalBTAddress[2], LocalBTAddress[1], LocalBTAddress[0]);
+    }
 
 	do
     {
@@ -1631,7 +1627,7 @@ E_SBFSPOT SetPlantTime(time_t ndays, time_t lowerlimit, time_t upperlimit)
 		int tz = get_long(pcktBuf + 57) & 0xFFFFFFFE;
 		int dst = get_long(pcktBuf + 57) & 0x00000001;
 		int magic = get_long(pcktBuf + 61); // What's this?
-		
+
 		time_t timediff = invCurrTime - hosttime;
 
 		if (VERBOSE_NORMAL)
@@ -1689,7 +1685,7 @@ E_SBFSPOT SetPlantTime(time_t ndays, time_t lowerlimit, time_t upperlimit)
 		}
 
 		// All checks passed - OK to set the time
-		
+
 		if (VERBOSE_NORMAL)
 		{
 			std::cout << "Adjusting plant time..." << std:: endl;
@@ -2455,7 +2451,9 @@ int GetConfig(Config *cfg)
 		strcpy(cfg->outputPath_Events, cfg->outputPath);
 
     if (strlen(cfg->plantname) == 0)
+    {
         strncpy(cfg->plantname, "MyPlant", sizeof(cfg->plantname));
+    }
 
 	if (cfg->timezone.empty())
 	{
@@ -2479,7 +2477,7 @@ int GetConfig(Config *cfg)
 		cfg->archMonths = 0;
 		cfg->nospot = 1;
 	}
-	
+
 	// If 1st day of the month and -am1 specified, force to -am2 to get last day of prev month
 	if (cfg->archMonths == 1)
 	{
@@ -3223,7 +3221,7 @@ void resetInverterData(InverterData *inv)
 E_SBFSPOT setDeviceData(InverterData *inv, LriDef lri, uint16_t cmd, Rec40S32 &data)
 {
 	E_SBFSPOT rc = E_OK;
-	
+
 	do
 	{
         pcktID++;
@@ -3248,9 +3246,13 @@ E_SBFSPOT setDeviceData(InverterData *inv, LriDef lri, uint16_t cmd, Rec40S32 &d
 	} while (!isCrcValid(pcktBuf[packetposition-3], pcktBuf[packetposition-2]));
 
     if (ConnType == CT_BLUETOOTH)
+    {
         bthSend(pcktBuf);
+    }
     else
+    {
         ethSend(pcktBuf, inv->IPAddress);
+    }
 
 	return rc;
 }
@@ -3258,7 +3260,7 @@ E_SBFSPOT setDeviceData(InverterData *inv, LriDef lri, uint16_t cmd, Rec40S32 &d
 E_SBFSPOT getDeviceData(InverterData *inv, LriDef lri, uint16_t cmd, Rec40S32 &data)
 {
 	E_SBFSPOT rc = E_OK;
-	
+
 	const int recordsize = 40;
 
 	do
@@ -3276,9 +3278,13 @@ E_SBFSPOT getDeviceData(InverterData *inv, LriDef lri, uint16_t cmd, Rec40S32 &d
 	while (!isCrcValid(pcktBuf[packetposition-3], pcktBuf[packetposition-2]));
 
     if (ConnType == CT_BLUETOOTH)
+    {
         bthSend(pcktBuf);
+    }
     else
+    {
         ethSend(pcktBuf, inv->IPAddress);
+    }
 
 	int validPcktID = 0;
     do
