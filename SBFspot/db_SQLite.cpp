@@ -61,6 +61,62 @@ const int MAX_INVERTERS = 10;
 
 using namespace std;
 
+// Returns the columns for the query to get the extended values from SpotData.
+// Values are fetched from the Config.
+// Key is PVO-Vxx where xx identifies the extended field, from 5 thru 12.
+// The value is the column name of the SpotData table to populate it with.
+// e.g. PVO_V5=Temperature, PVO_V6=Uac1, PVO_V7=Pdc1
+// The V5 and V6 are defaulted to the values above for backward compatibility.
+// The non-NULL fetched columns are averaged in case multiple SpotData rows match.
+// An empty string is returned in case of error.
+string db_SQL_Base::get_pvo_extended_values()
+{
+    std::stringstream result;
+    std::stringstream key;
+    std::string value;
+    for (int idx = 5; idx <= 12; idx++)
+    {
+        key.str("");
+        key << "PVO_V" << idx;
+        value.clear();
+        if (get_config(key.str(),value) == SQLITE_OK) 
+        {
+            if (value.empty())
+            {
+                if (idx == 5)
+                {
+                    result << "avg(Temperature),";
+                }
+                else if (idx == 6)
+                {
+                    result << "avg(Uac1),";
+                }
+                else
+                {
+                    result << "NULL,";
+                }
+            }
+            else
+            {
+                if (value == "NULL")
+                {
+                    result << "NULL,";
+                }
+                else
+                {
+                    result << "avg(" << value << "),";
+                }
+            }
+        }
+        else 
+        {
+	    print_error("get_config(" + key.str() + ") failed");
+            return "";
+        }
+    }
+    return result.str().substr(0, result.str().size()-1);
+}
+
 string db_SQL_Base::status_text(int status)
 {
 	switch (status)
@@ -244,18 +300,30 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
         {
             return rc;
         }
+        std::string extendedvalues = get_pvo_extended_values();
+        if (extendedvalues.empty())
+        {
+	    print_error("failed to build extendedvalues");
+	    return rc;
+        }
         std::stringstream result;
         while (sqlite3_step(dStmt) == SQLITE_ROW)
         {
+            // from 2nd record, add a record separator
+            if (!data.empty())
+            {
+                result << ";";
+            }
 	    string timeslot = (char *)sqlite3_column_text(dStmt, 0);
+
+            // Date and time
 	    string dt = (char *)sqlite3_column_text(dStmt, 1);
+
             // Energy Generation
             int64_t V1 = sqlite3_column_int64(dStmt, 2);
+
             // Power Generation
             int64_t V2 = sqlite3_column_int64(dStmt, 3);
-
-            // from 2nd record, add a record separator
-            if (!data.empty()) result << ";";
 
             // Mandatory values
             result << dt << "," << V1 << "," << V2;
@@ -296,12 +364,9 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
             }
 	    sqlite3_stmt *sStmt = NULL;
             sql.str("");
-            // !!! Make temperature and extended fields configurable through SQL or config, not hardcoded.
-            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot,"
-                "NULL,avg(Uac1),avg(Pdc1),avg(Pdc2),avg(Udc1),avg(Udc2),avg(Temperature),avg(Temperature) FROM SpotData WHERE "
-                "Serial = " << Serial <<
+            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot," << extendedvalues <<
+                " FROM SpotData WHERE Serial = " << Serial <<
                 " AND TimeSlot IS '" << timeslot << "' GROUP BY TimeSlot";
-            
             rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &sStmt, NULL);
             if (sStmt != NULL)
             {
@@ -333,6 +398,7 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
             recordcount++;
 	    result.str("");
         }
+        sqlite3_finalize(dStmt);
         return rc;
 }
 
@@ -399,7 +465,11 @@ int db_SQL_Base::get_config(const std::string key, std::string &value)
 	{
 		while (sqlite3_step(pStmt) == SQLITE_ROW)
 		{
-			value = (char *)sqlite3_column_text(pStmt, 0);
+			char * text = (char *)sqlite3_column_text(pStmt, 0);
+                        if (text != NULL)
+                        {
+                            value = text;
+                        }
 		}
 		sqlite3_finalize(pStmt);
 	}
