@@ -330,7 +330,7 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
 
 	    sqlite3_stmt *cStmt = NULL;
             sql.str("");
-            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot,"
+            sql << "SELECT datetime(((TimeStamp+149)/300)*300,'unixepoch','localtime') AS TimeSlot,"
                 "avg(EnergyUsed),avg(PowerUsed) FROM Consumption WHERE "
                 "TimeSlot IS '" << timeslot << "' GROUP BY TimeSlot";
 
@@ -364,7 +364,7 @@ int db_SQL_Base::batch_get_archdaydata(std::string &data, unsigned int Serial, i
             }
 	    sqlite3_stmt *sStmt = NULL;
             sql.str("");
-            sql << "SELECT datetime((TimeStamp/300)*300,'unixepoch','localtime') AS TimeSlot," << extendedvalues <<
+            sql << "SELECT datetime(((TimeStamp+149)/300)*300,'unixepoch','localtime') AS TimeSlot," << extendedvalues <<
                 " FROM SpotData WHERE Serial = " << Serial <<
                 " AND TimeSlot IS '" << timeslot << "' GROUP BY TimeSlot";
             rc = sqlite3_prepare_v2(m_dbHandle, sql.str().c_str(), -1, &sStmt, NULL);
