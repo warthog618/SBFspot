@@ -88,6 +88,7 @@ protected:
     std::string s_quoted(std::string str) { return "'" + str + "'"; }
     std::string s_quoted(char *str) { return "'" + std::string(str) + "'"; }
     bool isverbose(int level) { return !quiet && (verbose >= level); }
+    std::string get_pvo_extended_values();
     std::string status_text(int status);
     void print_error(std::string msg) { std::cerr << timestamp() << "Error: " << msg << ": '" << (m_dbHandle != NULL ? sqlite3_errmsg(m_dbHandle) : "null") << "'" << std::endl; }
     void print_error(std::string msg, std::string sql) { std::cerr << timestamp() << "Error: " << msg << ": '" << (m_dbHandle != NULL ? sqlite3_errmsg(m_dbHandle) : "null") << "' while executing\n" << sql << std::endl; }
