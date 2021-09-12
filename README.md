@@ -11,3 +11,5 @@ This scales badly as the view (the transform) has to be regenerated every time a
 The updated version reverses this approach - filtering the data first then performing the transform to generate the upload.
 This bypasses the database views totally to get data directly from the SQL tables.
 I think this approach is valid and equivalent, and it has been working fine for me for several weeks now, but I'm only testing one specific installation so YMMV.
+
+Update 12/09/2021: This branch is antique - it pre-dates SBFspot's github repo.  A port of the fix described above to the current (at time of writing) master can be found in the uploadperf branch.
